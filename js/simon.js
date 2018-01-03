@@ -1,5 +1,6 @@
 var KEYS = ['c', 'd', 'e', 'f'];
 var NOTE_DURATION = 1000;
+const WAIT_TIME = 2500;
 
 // NoteBox
 //
@@ -71,6 +72,200 @@ KEYS.forEach(function (key) {
 	notes[key] = new NoteBox(key);
 });
 
-KEYS.concat(KEYS.slice().reverse()).forEach(function(key, i) {
-	setTimeout(notes[key].play.bind(null, key), i * NOTE_DURATION);
-});
+/**
+ * A waiter that can be reset without generating multiple callbacks
+ */
+function Waiter(callback, waitTime) {
+	var timer = null;
+
+	this.reset = function() {
+		if(timer != null) {
+			clearTimeout(timer);
+			timer = null;
+		}
+		timer = setTimeout(doneTimer, waitTime);
+	}
+
+	this.start = function() {
+		this.reset();
+	}
+
+	function doneTimer() {
+		timer = null;
+		callback();
+	}
+}
+
+/**
+ * Plays all of the buttons in the sequence with a interval of 
+ * NOTE_DURATION
+ */
+function SeqPlayer(aBtnSequence, onPlayDone) {
+	this.play = function() {
+		function activate(idx) {
+			if(idx < aBtnSequence.length) {
+				aBtnSequence[idx].play();
+				setTimeout(activate.bind(null, idx + 1), NOTE_DURATION);
+			} else {
+				if(onPlayDone) onPlayDone();
+			}
+		}
+		activate(0);
+	}
+}
+
+/**
+ * Records note boxes clicks into an array and can play sequences using the
+ * SeqPlayer
+ */
+function SeqRecorder(oWatier) {
+	var pressedButtons = [];
+	var buttonDictionary = KEYS.map( (key) => new NoteBox(key, onNoteBoxClick)).reduce((acc, b) => {
+		b.disable();
+		acc[b.key] = b;
+		return acc;
+	}, {});
+
+	this.playSequence = function(onPlayDone){
+		disableButtons();
+		new SeqPlayer(pressedButtons, onPlayDone).play();
+	}
+
+	this.clearSequence = function() {
+		pressedButtons = [];
+	}
+
+	this.append = appendFn
+
+	this.startRecording = function() {
+		this.clearSequence();
+		enableButtons();
+	}
+
+	this.stopRecording = function() {
+		disableButtons();
+	}
+
+	this.getSequence = function() {
+		return pressedButtons;
+	}
+
+	function enableButtons() {
+		Object.values(buttonDictionary).forEach(b => b.enable());
+	}
+
+	function disableButtons() {
+		Object.values(buttonDictionary).forEach(b => b.disable());
+	}
+
+	function onNoteBoxClick(key) {
+		oWatier.reset();
+		appendFn(key);
+	}
+
+	function appendFn(key) {
+		pressedButtons.push(buttonDictionary[key])
+	}
+}
+
+/**
+ * Main impl of simon, start the game by calling start. The oNotes object is
+ * the one defined above
+ */ 
+function Simon(oNotes) {
+	var currentSequenece = []
+
+	this.start = function() {
+		startInstance();
+	}
+	
+	function onSuccess() {
+		startInstance();
+	}
+
+	function onFailure() {
+		clearSequence();
+		startInstance();
+	}
+
+	function startInstance() {
+		appendToSequence();
+		var fnValidation = function(selectedNotes) {
+			if (selectedNotes.length != currentSequenece.length) return onFailure();
+			var i = 0;
+			while (i < selectedNotes.length) {
+				if (selectedNotes[i].key != currentSequenece[i].key) return onFailure();
+				i++;
+			}
+			onSuccess();
+		}
+		let simonInstance = new SimonInstance(oNotes, currentSequenece, fnValidation)
+		simonInstance.start();
+
+	}
+
+	function appendToSequence() {
+		let aNotes = Object.values(oNotes);
+		let idx = Math.floor(Math.random() * (aNotes.length - 1));
+		currentSequenece.push(aNotes[idx]);
+	}
+
+	function clearSequence() {
+		currentSequenece = [];
+	}
+
+}
+
+/**
+ * A instance of Simon for a specific sequence of buttons, when the timer
+ * finishes, onTimout is called
+ */
+function SimonInstance(oNotes, aSequence, onTimout) {
+	let timer = new Waiter(onTimerDone, WAIT_TIME);
+	let userSeq = new SeqRecorder(timer);
+	let simonSeq = new SeqPlayer(aSequence, onStartDone);
+
+	this.start = function() {
+		userSeq.stopRecording();
+		simonSeq.play();
+	}
+
+	this.playUserInput = function() {
+		var fnCallback = function() {
+			userSeq.startRecording();
+		}
+		userSeq.playSequence(fnCallback);
+	}
+
+	function onStartDone() {
+		userSeq.startRecording();
+	}
+
+	function onTimerDone() {
+		userSeq.stopRecording();
+		onTimout(userSeq.getSequence());
+	}
+}
+
+/**
+ * Easy task, its just one simon instance that calls playUserInput
+ * every time timeout is reached
+ */
+function Repeater() {
+	let sInstance = new SimonInstance(notes, [], onTimeout)
+	this.start = function() {
+		init();
+	}
+
+	function init() {
+		sInstance.start();
+	}
+
+	function onTimeout() {
+		sInstance.playUserInput();
+		init();
+	}
+}
+
+new Simon(notes).start();
+//new Repeater().start();

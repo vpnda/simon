@@ -45,3 +45,7 @@ Create a file called `NOTES.md` and note any significant difficulties you had wh
 ## How to run
 
 By default Simon will run, if you want the easy task. Comment line 270 and uncomment 271
+
+### Look at it
+
+The live version of this can be found [here](https://vpineda.me/projects/simon-says)
